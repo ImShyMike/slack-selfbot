@@ -45,10 +45,19 @@ function chatPostEphemeral(channel: string, text: string, thread_ts?: string) {
     });
 }
 
-function getChannelName(channelId: string): Promise<string> {
+async function getChannelName(channelId: string): Promise<string> {
     return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
         .then(res => res.json())
         .then(data => (data as any).name ?? "unknown :(");
+}
+
+async function getChannelNames(channelIds: string[]): Promise<string[]> {
+    const dedupedIds = [...new Set(channelIds)];
+    const namesById = new Map(await Promise.all(
+        dedupedIds.map(async id => [id, await getChannelName(id)] as const),
+    ));
+
+    return channelIds.map(id => namesById.get(id) ?? "unknown :(");
 }
 
 type MessageMetadata = {
@@ -119,11 +128,12 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
 
             const messageText = firstMessage.text ?? "";
             const channels = [...messageText.matchAll(/<#(\w+)(?:\|[^>]*)?>/g)];
+            const channelIds = channels.flatMap(channel => channel[1] ? [channel[1]] : []);
 
-            const channelNames = await Promise.all(channels.map(channel => getChannelName(channel[1] ?? "")));
+            const channelNames = await getChannelNames(channelIds);
 
-            const constructedMessage = channels.length > 0
-                ? channels.map((channel, index) => `\`${channel[1]}\`: ${channelNames[index]}`).join("\n")
+            const constructedMessage = channelIds.length > 0
+                ? channelIds.map((channelId, index) => `\`${channelId}\`: ${channelNames[index]}`).join("\n")
                 : "No channels found in message";
 
             chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
