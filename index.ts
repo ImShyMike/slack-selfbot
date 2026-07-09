@@ -19,6 +19,8 @@ const userChannelId: string = (await client.callUnknown("conversations.open", {
     users: userInfo.user_id,
 }) as any).channel.id;
 
+console.log(`Logged in as ${userInfo.user} (${userInfo.user_id})`);
+
 let websocketUrl: string = `wss://wss-primary.slack.com/?token=${client.token}&sync_desync=1&slack_client=desktop&start_args=?agent=client&org_wide_aware=true&eac_cache_ts=true&cache_ts=0&name_tagging=true&only_self_subteams=true&connect_only=true&ms_latest=true&no_query_on_subscribe=1&flannel=3&lazy_channels=1&gateway_server=T09V59WQY1E-1&enterprise_id=E09V59WQY1E&batch_presence_aware=1`;
 
 let ws: WebSocket | undefined;
@@ -38,6 +40,12 @@ function chatPostEphemeral(channel: string, text: string, thread_ts?: string) {
             user: userInfo.user_id,
         }),
     });
+}
+
+function getChannelName(channelId: string): Promise<string> {
+    return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
+        .then(res => res.json())
+        .then(data => (data as any).name ?? "unknown :(");
 }
 
 type MessageMetadata = {
@@ -86,6 +94,36 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
                 // @ts-ignore
                 text: `Waiter, waiter! One more <https://hackclub.slack.com/archives/${msg.channel}/p${msg.ts.replace(".","")}|OOC> please!`,
             });
+        },
+    },
+    "private": {
+        me: async (msg: ShallowMessageMetadata) => {
+            const message = await client.conversationsHistory({
+                channel: msg.channel,
+                latest: msg.ts,
+                limit: 1,
+                inclusive: true,
+            });
+            if (!message.messages || message.messages.length === 0) {
+                console.error("Could not find message for reaction trigger");
+                return;
+            }
+            const firstMessage = message.messages?.[0];
+            if (!firstMessage) {
+                console.error("Could not find message for reaction trigger");
+                return;
+            }
+
+            const messageText = firstMessage.text ?? "";
+            const channels = [...messageText.matchAll(/<#(\w+)(?:\|[^>]*)?>/g)];
+
+            const channelNames = await Promise.all(channels.map(channel => getChannelName(channel[1] ?? "")));
+
+            const constructedMessage = channels.length > 0
+                ? channels.map((channel, index) => `\`${channel[1]}\`: ${channelNames[index]}`).join("\n")
+                : "No channels found in message";
+
+            chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
         },
     },
 }
@@ -188,7 +226,7 @@ function connect() {
                         channel: data.item.channel,
                         user: data.user,
                     };
-                    if (data.user !== userInfo.user_id && trigger.any) {
+                    if (trigger.any) {
                         await trigger.any(msg, data.reaction);
                     } else if (data.user === userInfo.user_id && trigger.me) {
                         await trigger.me(msg, data.reaction);
