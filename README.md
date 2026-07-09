@@ -2,6 +2,18 @@
 
 My silly selfbot for Slack that does some rather silly things :P
 
+## What does it do?
+
+- Lets you run selfbot commands by using `/me` messages
+- Supports these commands:
+  - `help [command]` - show available commands or details for one command
+  - `ping` - check whether the selfbot is alive
+  - `echo <text>` - send a normal message as yourself with mrkdwn support
+  - `id <@user|#channel|@usergroup>` - gets the SLack ID from the provided parameter
+- Watches for a couple reaction shortcuts:
+  - `:i-would-ooc-this-but-i-cant:` - DMs you every time someone reacts to a message with it
+  - `:private:` - gives you the name of the private channel
+
 ## Setup
 
 Slack user token:
