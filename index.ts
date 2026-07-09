@@ -1,26 +1,28 @@
 #!/usr/bin/env bun
 
-import { SlackClient } from 'slack-undoc-client';
+import { SlackClient } from "slack-undoc-client";
 
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
 const SLACK_XOXP = process.env.SLACK_XOXP;
-const SLACK_WORKSPACE = process.env.SLACK_WORKSPACE || 'hackclub';
+const SLACK_WORKSPACE = process.env.SLACK_WORKSPACE || "hackclub";
 
 if (!SLACK_COOKIE) {
-  throw new Error('SLACK_COOKIE environment variable is not set.');
+    throw new Error("SLACK_COOKIE environment variable is not set.");
 } else if (!SLACK_XOXP) {
-  throw new Error('SLACK_XOXP environment variable is not set.');
+    throw new Error("SLACK_XOXP environment variable is not set.");
 }
 
 const client = await SlackClient.create({
     cookie: SLACK_COOKIE,
     workspace: SLACK_WORKSPACE,
-})
+});
 
 const selfUserInfo = await client.authTest();
-const userChannelId: string = (await client.callUnknown("conversations.open", {
-    users: selfUserInfo.user_id,
-}) as any).channel.id;
+const userChannelId: string = (
+    (await client.callUnknown("conversations.open", {
+        users: selfUserInfo.user_id,
+    })) as any
+).channel.id;
 
 console.log(`Logged in as ${selfUserInfo.user} (${selfUserInfo.user_id})`);
 
@@ -29,11 +31,17 @@ let websocketUrl: string = `wss://wss-primary.slack.com/?token=${client.token}&s
 let ws: WebSocket | undefined;
 let reconnectTimer: Timer | undefined;
 
-async function chatPostEphemeral(channel: string, text: string, thread_ts?: string, blocks?: any[], user?: string) {
+async function chatPostEphemeral(
+    channel: string,
+    text: string,
+    thread_ts?: string,
+    blocks?: any[],
+    user?: string,
+) {
     fetch("https://slack.com/api/chat.postEphemeral", {
         method: "POST",
         headers: {
-            "Authorization": `Bearer ${SLACK_XOXP}`,
+            Authorization: `Bearer ${SLACK_XOXP}`,
             "Content-Type": "application/json;charset=utf-8",
         },
         body: JSON.stringify({
@@ -43,13 +51,16 @@ async function chatPostEphemeral(channel: string, text: string, thread_ts?: stri
             blocks,
             user: user ?? selfUserInfo.user_id,
         }),
-    }).then(res => res.json()).then(data => {
-        if (!(data as any).ok) {
-            console.error("Error posting ephemeral message:", data);
-        }
-    }).catch(err => {
-        console.error("Error posting ephemeral message:", err);
-    });
+    })
+        .then((res) => res.json())
+        .then((data) => {
+            if (!(data as any).ok) {
+                console.error("Error posting ephemeral message:", data);
+            }
+        })
+        .catch((err) => {
+            console.error("Error posting ephemeral message:", err);
+        });
 }
 
 type UserInfo = {
@@ -59,27 +70,31 @@ type UserInfo = {
     displayName: string;
     pronouns: string;
     imageUrl: string;
-}
+};
 
 async function getUserInfo(userId: string): Promise<UserInfo> {
     return fetch(`https://cachet.dunkirk.sh/users/${userId}`)
-        .then(res => res.json())
-        .then(data => data as UserInfo);
+        .then((res) => res.json())
+        .then((data) => data as UserInfo);
 }
 
 async function getChannelName(channelId: string): Promise<string> {
     return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
-        .then(res => res.json())
-        .then(data => (data as any).name ?? "unknown :(");
+        .then((res) => res.json())
+        .then((data) => (data as any).name ?? "unknown :(");
 }
 
 async function getChannelNames(channelIds: string[]): Promise<string[]> {
     const dedupedIds = [...new Set(channelIds)];
-    const namesById = new Map(await Promise.all(
-        dedupedIds.map(async id => [id, await getChannelName(id)] as const),
-    ));
+    const namesById = new Map(
+        await Promise.all(
+            dedupedIds.map(
+                async (id) => [id, await getChannelName(id)] as const,
+            ),
+        ),
+    );
 
-    return channelIds.map(id => namesById.get(id) ?? "unknown :(");
+    return channelIds.map((id) => namesById.get(id) ?? "unknown :(");
 }
 
 type MessageMetadata = {
@@ -89,32 +104,34 @@ type MessageMetadata = {
     channel: string;
     user: string;
     thread_ts?: string;
-}
+};
 
 type ShallowMessageMetadata = {
     ts: string;
     channel: string;
     user: string;
     thread_ts?: string;
-}
+};
 
 type Command = {
     description: string;
     args?: string;
     handler: (msg: MessageMetadata, args: string[]) => Promise<void>;
-}
+};
 
 type ReactionTrigger = {
     /// Only triggers when the reaction is added by the selfbot user
     me?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
     /// Triggers when the reaction is added by any user (including the selfbot user)
     any?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
-}
+};
 
 function formatHelpText() {
     return Object.entries(COMMANDS)
         .map(([name, command]) => {
-            const usage = command.args ? `*${name}* ${command.args}` : `*${name}*`;
+            const usage = command.args
+                ? `*${name}* ${command.args}`
+                : `*${name}*`;
             return `- ${usage}: ${command.description}`;
         })
         .join("\n");
@@ -126,11 +143,11 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
             await client.chatPostMessage({
                 channel: userChannelId,
                 // @ts-ignore
-                text: `Waiter, waiter! One more <https://${SLACK_WORKSPACE}.slack.com/archives/${msg.channel}/p${msg.ts.replace(".","")}|OOC> please!`,
+                text: `Waiter, waiter! One more <https://${SLACK_WORKSPACE}.slack.com/archives/${msg.channel}/p${msg.ts.replace(".", "")}|OOC> please!`,
             });
         },
     },
-    "private": {
+    private: {
         me: async (msg: ShallowMessageMetadata) => {
             const message = await client.conversationsHistory({
                 channel: msg.channel,
@@ -150,42 +167,64 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
 
             const messageText = firstMessage.text ?? "";
             const channels = [...messageText.matchAll(/<#(\w+)(?:\|[^>]*)?>/g)];
-            const channelIds = channels.flatMap(channel => channel[1] ? [channel[1]] : []);
+            const channelIds = channels.flatMap((channel) =>
+                channel[1] ? [channel[1]] : [],
+            );
 
             const channelNames = await getChannelNames(channelIds);
 
-            const constructedMessage = channelIds.length > 0
-                ? channelIds.map((channelId, index) => `\`${channelId}\`: ${channelNames[index]}`).join("\n")
-                : "No channels found in message";
+            const constructedMessage =
+                channelIds.length > 0
+                    ? channelIds
+                          .map(
+                              (channelId, index) =>
+                                  `\`${channelId}\`: ${channelNames[index]}`,
+                          )
+                          .join("\n")
+                    : "No channels found in message";
 
-            await chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
+            await chatPostEphemeral(
+                msg.channel,
+                constructedMessage,
+                msg.thread_ts,
+            );
         },
     },
-}
+};
 
 const COMMANDS: Record<string, Command> = {
-    "help": {
+    help: {
         description: "Show this help message.",
         args: "[command]",
         handler: async (msg: MessageMetadata, args: string[]) => {
             const commandName = args[0];
             if (commandName && COMMANDS[commandName]) {
                 const command = COMMANDS[commandName];
-                const usage = command.args ? `${commandName} ${command.args}` : commandName;
-                await chatPostEphemeral(msg.channel, `${usage}: ${command.description}`, msg.thread_ts);
+                const usage = command.args
+                    ? `${commandName} ${command.args}`
+                    : commandName;
+                await chatPostEphemeral(
+                    msg.channel,
+                    `${usage}: ${command.description}`,
+                    msg.thread_ts,
+                );
                 return;
             }
 
-            await chatPostEphemeral(msg.channel, `Available commands:\n${formatHelpText()}`, msg.thread_ts);
+            await chatPostEphemeral(
+                msg.channel,
+                `Available commands:\n${formatHelpText()}`,
+                msg.thread_ts,
+            );
         },
     },
-    "ping": {
+    ping: {
         description: "Check whether the selfbot is running.",
         handler: async (msg: MessageMetadata, args: string[]) => {
             await chatPostEphemeral(msg.channel, `Pong!`, msg.thread_ts);
         },
     },
-    "echo": {
+    echo: {
         description: "Send a message as yourself.",
         args: "<text>",
         handler: async (msg: MessageMetadata, args: string[]) => {
@@ -199,13 +238,17 @@ const COMMANDS: Record<string, Command> = {
             });
         },
     },
-    "id": {
+    id: {
         description: "Get the ID of a user, channel or usergroup.",
         args: "<@user|#channel|@usergroup>",
         handler: async (msg: MessageMetadata, args: string[]) => {
             const target = args[0];
             if (!target) {
-                await chatPostEphemeral(msg.channel, "Please provide a user, channel or usergroup.", msg.thread_ts);
+                await chatPostEphemeral(
+                    msg.channel,
+                    "Please provide a user, channel or usergroup.",
+                    msg.thread_ts,
+                );
                 return;
             }
 
@@ -216,31 +259,41 @@ const COMMANDS: Record<string, Command> = {
             } else if (target.startsWith("<#") && target.endsWith(">")) {
                 // Channel
                 id = target.slice(2, -1);
-            } else if (target.startsWith("<!subteam^") && target.endsWith(">")) {
+            } else if (
+                target.startsWith("<!subteam^") &&
+                target.endsWith(">")
+            ) {
                 // Usergroup
                 id = target.slice(10, -1);
             }
 
             if (!id) {
-                await chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup.", msg.thread_ts);
+                await chatPostEphemeral(
+                    msg.channel,
+                    "Invalid user, channel or usergroup.",
+                    msg.thread_ts,
+                );
                 return;
             }
 
             await chatPostEphemeral(msg.channel, id, msg.thread_ts);
         },
     },
-}
+};
 
 function connect() {
-    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+    if (
+        ws &&
+        (ws.readyState === WebSocket.CONNECTING ||
+            ws.readyState === WebSocket.OPEN)
+    ) {
         return;
     }
 
-    ws = new WebSocket(
-        websocketUrl, {
+    ws = new WebSocket(websocketUrl, {
         headers: {
-            Cookie: `d=${SLACK_COOKIE}`
-        }
+            Cookie: `d=${SLACK_COOKIE}`,
+        },
     });
 
     ws.addEventListener("message", async (event) => {
@@ -263,14 +316,19 @@ function connect() {
                     };
                     if (trigger.any) {
                         await trigger.any(msg, data.reaction);
-                    } else if (data.user === selfUserInfo.user_id && trigger.me) {
+                    } else if (
+                        data.user === selfUserInfo.user_id &&
+                        trigger.me
+                    ) {
                         await trigger.me(msg, data.reaction);
                     }
-                    
                 }
                 break;
             case "message":
-                if (data.subtype === "me_message" && data.user === selfUserInfo.user_id) {
+                if (
+                    data.subtype === "me_message" &&
+                    data.user === selfUserInfo.user_id
+                ) {
                     client.chatDelete({
                         channel: data.channel,
                         ts: data.ts,

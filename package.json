@@ -5,9 +5,13 @@
   "readme": "README.md",
   "version": "0.1.0",
   "bin": "./index.ts",
+  "scripts": {
+    "format": "prettier -w ."
+  },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "@types/node": "^26.1.0"
+    "@types/node": "^26.1.0",
+    "prettier": "^3.9.4"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
