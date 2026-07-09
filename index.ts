@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { SlackClient } from 'slack-undoc-client';
 
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
