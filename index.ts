@@ -17,32 +17,54 @@ const client = await SlackClient.create({
     workspace: SLACK_WORKSPACE,
 })
 
-const userInfo = await client.authTest();
+const selfUserInfo = await client.authTest();
 const userChannelId: string = (await client.callUnknown("conversations.open", {
-    users: userInfo.user_id,
+    users: selfUserInfo.user_id,
 }) as any).channel.id;
 
-console.log(`Logged in as ${userInfo.user} (${userInfo.user_id})`);
+console.log(`Logged in as ${selfUserInfo.user} (${selfUserInfo.user_id})`);
 
 let websocketUrl: string = `wss://wss-primary.slack.com/?token=${client.token}&sync_desync=1&slack_client=desktop&start_args=?agent=client&org_wide_aware=true&eac_cache_ts=true&cache_ts=0&name_tagging=true&only_self_subteams=true&connect_only=true&ms_latest=true&no_query_on_subscribe=1&flannel=3&lazy_channels=1&gateway_server=T09V59WQY1E-1&enterprise_id=E09V59WQY1E&batch_presence_aware=1`;
 
 let ws: WebSocket | undefined;
 let reconnectTimer: Timer | undefined;
 
-function chatPostEphemeral(channel: string, text: string, thread_ts?: string) {
+async function chatPostEphemeral(channel: string, text: string, thread_ts?: string, blocks?: any[], user?: string) {
     fetch("https://slack.com/api/chat.postEphemeral", {
         method: "POST",
         headers: {
             "Authorization": `Bearer ${SLACK_XOXP}`,
-            "Content-Type": "application/json",
+            "Content-Type": "application/json;charset=utf-8",
         },
         body: JSON.stringify({
             channel,
             text,
             thread_ts,
-            user: userInfo.user_id,
+            blocks,
+            user: user ?? selfUserInfo.user_id,
         }),
+    }).then(res => res.json()).then(data => {
+        if (!(data as any).ok) {
+            console.error("Error posting ephemeral message:", data);
+        }
+    }).catch(err => {
+        console.error("Error posting ephemeral message:", err);
     });
+}
+
+type UserInfo = {
+    type: "user";
+    id: string;
+    userId: string;
+    displayName: string;
+    pronouns: string;
+    imageUrl: string;
+}
+
+async function getUserInfo(userId: string): Promise<UserInfo> {
+    return fetch(`https://cachet.dunkirk.sh/users/${userId}`)
+        .then(res => res.json())
+        .then(data => data as UserInfo);
 }
 
 async function getChannelName(channelId: string): Promise<string> {
@@ -136,7 +158,7 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
                 ? channelIds.map((channelId, index) => `\`${channelId}\`: ${channelNames[index]}`).join("\n")
                 : "No channels found in message";
 
-            chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
+            await chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
         },
     },
 }
@@ -150,17 +172,17 @@ const COMMANDS: Record<string, Command> = {
             if (commandName && COMMANDS[commandName]) {
                 const command = COMMANDS[commandName];
                 const usage = command.args ? `${commandName} ${command.args}` : commandName;
-                chatPostEphemeral(msg.channel, `${usage}: ${command.description}`, msg.thread_ts);
+                await chatPostEphemeral(msg.channel, `${usage}: ${command.description}`, msg.thread_ts);
                 return;
             }
 
-            chatPostEphemeral(msg.channel, `Available commands:\n${formatHelpText()}`, msg.thread_ts);
+            await chatPostEphemeral(msg.channel, `Available commands:\n${formatHelpText()}`, msg.thread_ts);
         },
     },
     "ping": {
         description: "Check whether the selfbot is running.",
         handler: async (msg: MessageMetadata, args: string[]) => {
-            chatPostEphemeral(msg.channel, `Pong!`, msg.thread_ts);
+            await chatPostEphemeral(msg.channel, `Pong!`, msg.thread_ts);
         },
     },
     "echo": {
@@ -183,7 +205,7 @@ const COMMANDS: Record<string, Command> = {
         handler: async (msg: MessageMetadata, args: string[]) => {
             const target = args[0];
             if (!target) {
-                chatPostEphemeral(msg.channel, "Please provide a user, channel or usergroup.", msg.thread_ts);
+                await chatPostEphemeral(msg.channel, "Please provide a user, channel or usergroup.", msg.thread_ts);
                 return;
             }
 
@@ -200,11 +222,11 @@ const COMMANDS: Record<string, Command> = {
             }
 
             if (!id) {
-                chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup.", msg.thread_ts);
+                await chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup.", msg.thread_ts);
                 return;
             }
 
-            chatPostEphemeral(msg.channel, id, msg.thread_ts);
+            await chatPostEphemeral(msg.channel, id, msg.thread_ts);
         },
     },
 }
@@ -241,34 +263,35 @@ function connect() {
                     };
                     if (trigger.any) {
                         await trigger.any(msg, data.reaction);
-                    } else if (data.user === userInfo.user_id && trigger.me) {
+                    } else if (data.user === selfUserInfo.user_id && trigger.me) {
                         await trigger.me(msg, data.reaction);
                     }
                     
                 }
                 break;
             case "message":
-                if (data.subtype !== "me_message" || data.user !== userInfo.user_id) return;
-                client.chatDelete({
-                    channel: data.channel,
-                    ts: data.ts,
-                });
-                const messageText: string = data.text.trim();
-                const [command, ...args] = messageText.split(/\s+/);
-                if (!command) return;
+                if (data.subtype === "me_message" && data.user === selfUserInfo.user_id) {
+                    client.chatDelete({
+                        channel: data.channel,
+                        ts: data.ts,
+                    });
+                    const messageText: string = data.text.trim();
+                    const [command, ...args] = messageText.split(/\s+/);
+                    if (!command) return;
 
-                const msg: MessageMetadata = {
-                    text: messageText,
-                    blocks: data.blocks,
-                    ts: data.ts,
-                    channel: data.channel,
-                    user: data.user,
-                    thread_ts: data.thread_ts,
-                };
+                    const msg: MessageMetadata = {
+                        text: messageText,
+                        blocks: data.blocks,
+                        ts: data.ts,
+                        channel: data.channel,
+                        user: data.user,
+                        thread_ts: data.thread_ts,
+                    };
 
-                const commandDef = COMMANDS[command];
-                if (commandDef) {
-                    await commandDef.handler(msg, args);
+                    const commandDef = COMMANDS[command];
+                    if (commandDef) {
+                        await commandDef.handler(msg, args);
+                    }
                 }
                 break;
             default:
