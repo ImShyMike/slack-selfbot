@@ -42,6 +42,14 @@ function chatPostEphemeral(channel: string, text: string, thread_ts?: string) {
 
 type MessageMetadata = {
     text: string;
+    blocks: any[];
+    ts: string;
+    channel: string;
+    user: string;
+    thread_ts?: string;
+}
+
+type ShallowMessageMetadata = {
     ts: string;
     channel: string;
     user: string;
@@ -54,6 +62,13 @@ type Command = {
     handler: (msg: MessageMetadata, args: string[]) => Promise<void>;
 }
 
+type ReactionTrigger = {
+    /// Only triggers when the reaction is added by the selfbot user
+    me?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
+    /// Triggers when the reaction is added by any user (including the selfbot user)
+    any?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
+}
+
 function formatHelpText() {
     return Object.entries(COMMANDS)
         .map(([name, command]) => {
@@ -61,6 +76,18 @@ function formatHelpText() {
             return `- ${usage}: ${command.description}`;
         })
         .join("\n");
+}
+
+const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
+    "i-would-ooc-this-but-i-cant": {
+        any: async (msg: ShallowMessageMetadata) => {
+            await client.chatPostMessage({
+                channel: userChannelId,
+                // @ts-ignore
+                text: `Waiter, waiter! One more <https://hackclub.slack.com/archives/${msg.channel}/p${msg.ts.replace(".","")}|OOC> please!`,
+            });
+        },
+    },
 }
 
 const COMMANDS: Record<string, Command> = {
@@ -99,6 +126,36 @@ const COMMANDS: Record<string, Command> = {
             });
         },
     },
+    "id": {
+        description: "Get the ID of a user, channel or usergroup.",
+        args: "<@user|#channel|@usergroup>",
+        handler: async (msg: MessageMetadata, args: string[]) => {
+            const target = args[0];
+            if (!target) {
+                chatPostEphemeral(msg.channel, "Please provide a user, channel or usergroup.", msg.thread_ts);
+                return;
+            }
+
+            let id: string | undefined;
+            if (target.startsWith("<@") && target.endsWith(">")) {
+                // User
+                id = target.slice(2, -1).split("|")[0];
+            } else if (target.startsWith("<#") && target.endsWith(">")) {
+                // Channel
+                id = target.slice(2, -1);
+            } else if (target.startsWith("<!subteam^") && target.endsWith(">")) {
+                // Usergroup
+                id = target.slice(10, -1);
+            }
+
+            if (!id) {
+                chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup.", msg.thread_ts);
+                return;
+            }
+
+            chatPostEphemeral(msg.channel, id, msg.thread_ts);
+        },
+    },
 }
 
 function connect() {
@@ -124,12 +181,19 @@ function connect() {
                 break;
             case "reaction_added":
                 //console.log(`Reaction added: ${data.reaction} by ${data.user} in ${data.item.channel}`);
-                if (data.reaction === "i-would-ooc-this-but-i-cant") {
-                    await client.chatPostMessage({
-                        channel: userChannelId,
-                        // @ts-ignore
-                        text: `Waiter, waiter! One more <https://hackclub.slack.com/archives/${data.item.channel}/p${data.item.ts.replace(".","")}|OOC> please!`,
-                    });
+                const trigger = REACTION_TRIGGERS[data.reaction];
+                if (trigger) {
+                    const msg: ShallowMessageMetadata = {
+                        ts: data.item.ts,
+                        channel: data.item.channel,
+                        user: data.user,
+                    };
+                    if (data.user !== userInfo.user_id && trigger.any) {
+                        await trigger.any(msg, data.reaction);
+                    } else if (data.user === userInfo.user_id && trigger.me) {
+                        await trigger.me(msg, data.reaction);
+                    }
+                    
                 }
                 break;
             case "message":
@@ -144,6 +208,7 @@ function connect() {
 
                 const msg: MessageMetadata = {
                     text: messageText,
+                    blocks: data.blocks,
                     ts: data.ts,
                     channel: data.channel,
                     user: data.user,
