@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "readme": "README.md",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "bin": "./index.ts",
   "scripts": {
     "format": "prettier -w ."
