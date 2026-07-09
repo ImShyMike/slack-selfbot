@@ -4,6 +4,7 @@ import { SlackClient } from 'slack-undoc-client';
 
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
 const SLACK_XOXP = process.env.SLACK_XOXP;
+const SLACK_WORKSPACE = process.env.SLACK_WORKSPACE || 'hackclub';
 
 if (!SLACK_COOKIE) {
   throw new Error('SLACK_COOKIE environment variable is not set.');
@@ -13,7 +14,7 @@ if (!SLACK_COOKIE) {
 
 const client = await SlackClient.create({
     cookie: SLACK_COOKIE,
-    workspace: 'hackclub',
+    workspace: SLACK_WORKSPACE,
 })
 
 const userInfo = await client.authTest();
@@ -94,7 +95,7 @@ const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
             await client.chatPostMessage({
                 channel: userChannelId,
                 // @ts-ignore
-                text: `Waiter, waiter! One more <https://hackclub.slack.com/archives/${msg.channel}/p${msg.ts.replace(".","")}|OOC> please!`,
+                text: `Waiter, waiter! One more <https://${SLACK_WORKSPACE}.slack.com/archives/${msg.channel}/p${msg.ts.replace(".","")}|OOC> please!`,
             });
         },
     },
