@@ -168,8 +168,11 @@ function connect() {
                 break;
 
             default:
-                // console.log("Received unknown event:", data.type);
-                // await Bun.write(`./events/${data.type}.json`, JSON.stringify(data, null, 2));
+                console.log("Received unknown event:", data.type);
+                await Bun.write(
+                    `./event_logs/${data.type}.json`,
+                    JSON.stringify(data, null, 2),
+                );
                 break;
         }
     });
