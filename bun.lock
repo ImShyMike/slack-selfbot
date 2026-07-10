@@ -5,15 +5,15 @@
     "": {
       "name": "slack-selfbot",
       "dependencies": {
-        "slack-undoc-client": "latest",
+        "slack-undoc-client": "^1.1.2",
       },
       "devDependencies": {
-        "@types/bun": "latest",
-        "@types/node": "latest",
-        "prettier": "latest",
+        "@types/bun": "^1.3.14",
+        "@types/node": "^26.1.0",
+        "prettier": "^3.9.4",
       },
       "peerDependencies": {
-        "typescript": "latest",
+        "typescript": "^6.0.3",
       },
     },
   },
@@ -26,7 +26,7 @@
 
     "prettier": ["prettier@3.9.4", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-yWG/o/4oJfo036EKAfK6ACAoDOfHeRHx4tuxkfBZiauURiaSmYwlpOr5LQqKtIkRD2z1PLteme2WoxEnj4tHTg=="],
 
-    "slack-undoc-client": ["slack-undoc-client@1.1.1", "", {}, "sha512-D7+CKoiVjlimxGCzgAvpev42pe0X1Fepes2ZP3tCU6bLCpp7vG/PHRN3wuxTG/SF+z2WcXlZZxv00/FIaObTfQ=="],
+    "slack-undoc-client": ["slack-undoc-client@1.1.2", "", {}, "sha512-25IEPILUtz/IP4lncXAaac5RA7PnXzPi6PRVp4bNwKCuqcuigbXGjL1FU5k+ym/1MQr2SpYLNjN4gMUlHaAtLg=="],
 
     "typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 

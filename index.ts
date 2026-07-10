@@ -119,7 +119,7 @@ async function getChannelNames(channelIds: string[]): Promise<string[]> {
     return channelIds.map((id) => namesById.get(id) ?? "unknown :(");
 }
 
-const context: BotContext = {
+const ctx: BotContext = {
     client,
     selfUserId: selfUserInfo.user_id,
     userChannelId,
@@ -166,15 +166,29 @@ function connect() {
                 //console.log(`Reaction added: ${data.reaction} by ${data.user} in ${data.item.channel}`);
                 const trigger = REACTION_TRIGGERS[data.reaction];
                 if (trigger) {
-                    const msg: ShallowMessageMetadata = {
-                        ts: data.item.ts,
-                        channel: data.item.channel,
-                        user: data.user,
-                    };
-                    if (trigger.any) {
-                        await trigger.any(msg, data.reaction, context);
-                    } else if (data.user === selfUserInfo.user_id && trigger.me) {
-                        await trigger.me(msg, data.reaction, context);
+                    if (trigger.resolveMessage) {
+                        const msg = await getMessage(data.item.channel, data.item.ts);
+                        if (!msg) {
+                            console.error("Failed to resolve message for reaction trigger:", data.reaction);
+                            chatPostEphemeral(data.item.channel, "Message not found", data.item.thread_ts);
+                            return;
+                        }
+                        if (trigger.any) {
+                            await trigger.any(msg, ctx);
+                        } else if (data.user === selfUserInfo.user_id && trigger.me) {
+                            await trigger.me(msg, ctx);
+                        }
+                    } else {
+                        const msg: ShallowMessageMetadata = {
+                            ts: data.item.ts,
+                            channel: data.item.channel,
+                            user: data.user,
+                        };
+                        if (trigger.any) {
+                            await trigger.any(msg, ctx);
+                        } else if (data.user === selfUserInfo.user_id && trigger.me) {
+                            await trigger.me(msg, ctx);
+                        }
                     }
                 }
                 break;
@@ -201,7 +215,7 @@ function connect() {
 
                     const commandDef = COMMANDS[command];
                     if (commandDef) {
-                        await commandDef.handler(msg, args, context);
+                        await commandDef.handler(msg, args, ctx);
                     }
                 }
                 break;

@@ -51,16 +51,19 @@ export type Command = {
     handler: (msg: MessageMetadata, args: string[], context: BotContext) => Promise<void>;
 };
 
-export type ReactionTrigger = {
-    name: string;
+type ReactionCallback<T> = (msg: T, ctx: BotContext) => Promise<void>;
 
+type ReactionTriggerBase<T, Resolve extends boolean> = {
+    name: string;
     /**
      * Only triggers when the reaction is added by the selfbot user
      */
-    me?: (msg: ShallowMessageMetadata, reaction: string, context: BotContext) => Promise<void>;
-
+    me?: ReactionCallback<T>;
     /**
      * Triggers when the reaction is added by any user (including the selfbot user)
      */
-    any?: (msg: ShallowMessageMetadata, reaction: string, context: BotContext) => Promise<void>;
-};
+    any?: ReactionCallback<T>;
+} & (Resolve extends true ? { resolveMessage: true } : { resolveMessage?: false });
+
+export type ReactionTrigger =
+    ReactionTriggerBase<MessageMetadata, true> | ReactionTriggerBase<ShallowMessageMetadata, false>;
