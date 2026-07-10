@@ -1,6 +1,26 @@
 #!/usr/bin/env bun
 
 import { SlackClient } from "slack-undoc-client";
+import type { BotContext, Command, MessageMetadata, ReactionTrigger, ShallowMessageMetadata } from "./types";
+
+async function loadModules<T>(pattern: string): Promise<T[]> {
+    const glob = new Bun.Glob(pattern);
+    const modules: T[] = [];
+
+    for await (const file of glob.scan(".")) {
+        const module = await import(`./${file}`);
+        modules.push(module.default);
+    }
+
+    return modules;
+}
+
+const commandModules = await loadModules<Command>("commands/*.ts");
+const reactionModules = await loadModules<ReactionTrigger>("reactions/*.ts");
+
+const COMMANDS = Object.fromEntries(commandModules.map((command) => [command.name, command]));
+
+const REACTION_TRIGGERS = Object.fromEntries(reactionModules.map((reaction) => [reaction.name, reaction]));
 
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
 const SLACK_XOXP = process.env.SLACK_XOXP;
@@ -31,13 +51,7 @@ let websocketUrl: string = `wss://wss-primary.slack.com/?token=${client.token}&s
 let ws: WebSocket | undefined;
 let reconnectTimer: Timer | undefined;
 
-async function chatPostEphemeral(
-    channel: string,
-    text: string,
-    thread_ts?: string,
-    blocks?: any[],
-    user?: string,
-) {
+async function chatPostEphemeral(channel: string, text: string, thread_ts?: string, blocks?: any[], user?: string) {
     fetch("https://slack.com/api/chat.postEphemeral", {
         method: "POST",
         headers: {
@@ -78,215 +92,17 @@ async function getUserInfo(userId: string): Promise<UserInfo> {
         .then((data) => data as UserInfo);
 }
 
-async function getChannelName(channelId: string): Promise<string> {
-    return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
-        .then((res) => res.json())
-        .then((data) => (data as any).name ?? "unknown :(");
-}
-
-async function getChannelNames(channelIds: string[]): Promise<string[]> {
-    const dedupedIds = [...new Set(channelIds)];
-    const namesById = new Map(
-        await Promise.all(
-            dedupedIds.map(
-                async (id) => [id, await getChannelName(id)] as const,
-            ),
-        ),
-    );
-
-    return channelIds.map((id) => namesById.get(id) ?? "unknown :(");
-}
-
-type MessageMetadata = {
-    text: string;
-    blocks: any[];
-    ts: string;
-    channel: string;
-    user: string;
-    thread_ts?: string;
-};
-
-type ShallowMessageMetadata = {
-    ts: string;
-    channel: string;
-    user: string;
-    thread_ts?: string;
-};
-
-type Command = {
-    description: string;
-    args?: string;
-    handler: (msg: MessageMetadata, args: string[]) => Promise<void>;
-};
-
-type ReactionTrigger = {
-    /// Only triggers when the reaction is added by the selfbot user
-    me?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
-    /// Triggers when the reaction is added by any user (including the selfbot user)
-    any?: (msg: ShallowMessageMetadata, reaction: string) => Promise<void>;
-};
-
-function formatHelpText() {
-    return Object.entries(COMMANDS)
-        .map(([name, command]) => {
-            const usage = command.args
-                ? `*${name}* ${command.args}`
-                : `*${name}*`;
-            return `- ${usage}: ${command.description}`;
-        })
-        .join("\n");
-}
-
-const REACTION_TRIGGERS: Record<string, ReactionTrigger> = {
-    "i-would-ooc-this-but-i-cant": {
-        any: async (msg: ShallowMessageMetadata) => {
-            await client.chatPostMessage({
-                channel: userChannelId,
-                // @ts-ignore
-                text: `Waiter, waiter! One more <https://${SLACK_WORKSPACE}.slack.com/archives/${msg.channel}/p${msg.ts.replace(".", "")}|OOC> please!`,
-            });
-        },
-    },
-    private: {
-        me: async (msg: ShallowMessageMetadata) => {
-            const message = await client.conversationsHistory({
-                channel: msg.channel,
-                latest: msg.ts,
-                limit: 1,
-                inclusive: true,
-            });
-            if (!message.messages || message.messages.length === 0) {
-                console.error("Could not find message for reaction trigger");
-                return;
-            }
-            const firstMessage = message.messages?.[0];
-            if (!firstMessage) {
-                console.error("Could not find message for reaction trigger");
-                return;
-            }
-
-            const messageText = firstMessage.text ?? "";
-            const channels = [...messageText.matchAll(/<#(\w+)(?:\|[^>]*)?>/g)];
-            const channelIds = channels.flatMap((channel) =>
-                channel[1] ? [channel[1]] : [],
-            );
-
-            const channelNames = await getChannelNames(channelIds);
-
-            const constructedMessage =
-                channelIds.length > 0
-                    ? channelIds
-                          .map(
-                              (channelId, index) =>
-                                  `\`${channelId}\`: ${channelNames[index]}`,
-                          )
-                          .join("\n")
-                    : "No channels found in message";
-
-            await chatPostEphemeral(
-                msg.channel,
-                constructedMessage,
-                msg.thread_ts,
-            );
-        },
-    },
-};
-
-const COMMANDS: Record<string, Command> = {
-    help: {
-        description: "Show this help message.",
-        args: "[command]",
-        handler: async (msg: MessageMetadata, args: string[]) => {
-            const commandName = args[0];
-            if (commandName && COMMANDS[commandName]) {
-                const command = COMMANDS[commandName];
-                const usage = command.args
-                    ? `${commandName} ${command.args}`
-                    : commandName;
-                await chatPostEphemeral(
-                    msg.channel,
-                    `${usage}: ${command.description}`,
-                    msg.thread_ts,
-                );
-                return;
-            }
-
-            await chatPostEphemeral(
-                msg.channel,
-                `Available commands:\n${formatHelpText()}`,
-                msg.thread_ts,
-            );
-        },
-    },
-    ping: {
-        description: "Check whether the selfbot is running.",
-        handler: async (msg: MessageMetadata, args: string[]) => {
-            await chatPostEphemeral(msg.channel, `Pong!`, msg.thread_ts);
-        },
-    },
-    echo: {
-        description: "Send a message as yourself.",
-        args: "<text>",
-        handler: async (msg: MessageMetadata, args: string[]) => {
-            const echoText = args.join(" ");
-            client.chatPostMessage({
-                channel: msg.channel,
-                thread_ts: msg.thread_ts,
-                ts: msg.ts,
-                // @ts-ignore
-                text: echoText,
-            });
-        },
-    },
-    id: {
-        description: "Get the ID of a user, channel or usergroup.",
-        args: "<@user|#channel|@usergroup>",
-        handler: async (msg: MessageMetadata, args: string[]) => {
-            const target = args[0];
-            if (!target) {
-                await chatPostEphemeral(
-                    msg.channel,
-                    "Please provide a user, channel or usergroup.",
-                    msg.thread_ts,
-                );
-                return;
-            }
-
-            let id: string | undefined;
-            if (target.startsWith("<@") && target.endsWith(">")) {
-                // User
-                id = target.slice(2, -1).split("|")[0];
-            } else if (target.startsWith("<#") && target.endsWith(">")) {
-                // Channel
-                id = target.slice(2, -1);
-            } else if (
-                target.startsWith("<!subteam^") &&
-                target.endsWith(">")
-            ) {
-                // Usergroup
-                id = target.slice(10, -1);
-            }
-
-            if (!id) {
-                await chatPostEphemeral(
-                    msg.channel,
-                    "Invalid user, channel or usergroup.",
-                    msg.thread_ts,
-                );
-                return;
-            }
-
-            await chatPostEphemeral(msg.channel, id, msg.thread_ts);
-        },
-    },
+const context: BotContext = {
+    client,
+    selfUserId: selfUserInfo.user_id,
+    userChannelId,
+    workspace: SLACK_WORKSPACE,
+    commands: COMMANDS,
+    chatPostEphemeral,
 };
 
 function connect() {
-    if (
-        ws &&
-        (ws.readyState === WebSocket.CONNECTING ||
-            ws.readyState === WebSocket.OPEN)
-    ) {
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
         return;
     }
 
@@ -298,13 +114,16 @@ function connect() {
 
     ws.addEventListener("message", async (event) => {
         const data = JSON.parse(event.data);
+
         switch (data.type) {
             case "hello":
                 console.log(`Connected to '${data.region}' (${data.host_id})`);
                 break;
+
             case "reconnect_url":
                 websocketUrl = data.url;
                 break;
+
             case "reaction_added":
                 //console.log(`Reaction added: ${data.reaction} by ${data.user} in ${data.item.channel}`);
                 const trigger = REACTION_TRIGGERS[data.reaction];
@@ -315,20 +134,15 @@ function connect() {
                         user: data.user,
                     };
                     if (trigger.any) {
-                        await trigger.any(msg, data.reaction);
-                    } else if (
-                        data.user === selfUserInfo.user_id &&
-                        trigger.me
-                    ) {
-                        await trigger.me(msg, data.reaction);
+                        await trigger.any(msg, data.reaction, context);
+                    } else if (data.user === selfUserInfo.user_id && trigger.me) {
+                        await trigger.me(msg, data.reaction, context);
                     }
                 }
                 break;
+
             case "message":
-                if (
-                    data.subtype === "me_message" &&
-                    data.user === selfUserInfo.user_id
-                ) {
+                if (data.subtype === "me_message" && data.user === selfUserInfo.user_id) {
                     client.chatDelete({
                         channel: data.channel,
                         ts: data.ts,
@@ -348,10 +162,11 @@ function connect() {
 
                     const commandDef = COMMANDS[command];
                     if (commandDef) {
-                        await commandDef.handler(msg, args);
+                        await commandDef.handler(msg, args, context);
                     }
                 }
                 break;
+
             default:
                 // console.log("Received unknown event:", data.type);
                 // await Bun.write(`./events/${data.type}.json`, JSON.stringify(data, null, 2));
