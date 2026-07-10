@@ -1,12 +1,11 @@
-import type { SlackClient } from "slack-undoc-client";
+import type { MessagesListResponse, SlackClient } from "slack-undoc-client";
 
-export type MessageMetadata = {
-    text: string;
-    blocks: any[];
-    ts: string;
+type MessagesByChannel = MessagesListResponse["messages_data"];
+type SlackMessage = MessagesByChannel[keyof MessagesByChannel]["messages"][number];
+
+export type MessageMetadata = Omit<SlackMessage, "thread_ts"> & {
     channel: string;
-    user: string;
-    thread_ts?: string;
+    thread_ts?: SlackMessage["thread_ts"];
 };
 
 export type ShallowMessageMetadata = {
@@ -14,6 +13,15 @@ export type ShallowMessageMetadata = {
     channel: string;
     user: string;
     thread_ts?: string;
+};
+
+export type UserInfo = {
+    type: "user";
+    id: string;
+    userId: string;
+    displayName: string;
+    pronouns: string;
+    imageUrl: string;
 };
 
 export type BotContext = {
@@ -29,6 +37,11 @@ export type BotContext = {
         blocks?: any[],
         user?: string,
     ) => Promise<void> | void;
+    getMessages: (channel: string, ts_list: string[]) => Promise<MessageMetadata[] | null>;
+    getMessage: (channel: string, ts: string) => Promise<MessageMetadata | null>;
+    getUserInfo: (userId: string) => Promise<UserInfo | null>;
+    getChannelName: (channelId: string) => Promise<string | null>;
+    getChannelNames: (channelIds: string[]) => Promise<(string | null)[]>;
 };
 
 export type Command = {

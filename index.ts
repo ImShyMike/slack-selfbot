@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { SlackClient } from "slack-undoc-client";
-import type { BotContext, Command, MessageMetadata, ReactionTrigger, ShallowMessageMetadata } from "./types";
+import type { BotContext, Command, MessageMetadata, ReactionTrigger, ShallowMessageMetadata, UserInfo } from "./types";
 
 async function loadModules<T>(pattern: string): Promise<T[]> {
     const glob = new Bun.Glob(pattern);
@@ -52,6 +52,28 @@ let websocketUrl: string = `wss://wss-primary.slack.com/?token=${client.token}&s
 let ws: WebSocket | undefined;
 let reconnectTimer: Timer | undefined;
 
+async function getMessages(channel: string, ts_list: string[]): Promise<MessageMetadata[] | null> {
+    const response = await client.messagesList({
+        message_ids: JSON.stringify([{ channel, timestamps: ts_list }]),
+        org_wide_aware: true,
+        cached_latest_updates: "{}",
+    });
+
+    const messages = response.messages_data[channel as keyof typeof response.messages_data]?.messages;
+    if (!messages) return null;
+
+    return messages.map((msg) => ({
+        ...msg,
+        channel,
+    }));
+}
+
+async function getMessage(channel: string, ts: string): Promise<MessageMetadata | null> {
+    const messages = await getMessages(channel, [ts]);
+    if (!messages || messages.length === 0) return null;
+    return messages[0] ?? null;
+}
+
 async function chatPostEphemeral(channel: string, text: string, thread_ts?: string, blocks?: any[], user?: string) {
     fetch("https://slack.com/api/chat.postEphemeral", {
         method: "POST",
@@ -78,19 +100,23 @@ async function chatPostEphemeral(channel: string, text: string, thread_ts?: stri
         });
 }
 
-type UserInfo = {
-    type: "user";
-    id: string;
-    userId: string;
-    displayName: string;
-    pronouns: string;
-    imageUrl: string;
-};
-
 async function getUserInfo(userId: string): Promise<UserInfo> {
     return fetch(`https://cachet.dunkirk.sh/users/${userId}`)
         .then((res) => res.json())
         .then((data) => data as UserInfo);
+}
+
+async function getChannelName(channelId: string): Promise<string> {
+    return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
+        .then((res) => res.json())
+        .then((data) => (data as any).name ?? "unknown :(");
+}
+
+async function getChannelNames(channelIds: string[]): Promise<string[]> {
+    const dedupedIds = [...new Set(channelIds)];
+    const namesById = new Map(await Promise.all(dedupedIds.map(async (id) => [id, await getChannelName(id)] as const)));
+
+    return channelIds.map((id) => namesById.get(id) ?? "unknown :(");
 }
 
 const context: BotContext = {
@@ -100,6 +126,11 @@ const context: BotContext = {
     workspace: SLACK_WORKSPACE,
     commands: COMMANDS,
     chatPostEphemeral,
+    getMessages,
+    getMessage,
+    getUserInfo,
+    getChannelName,
+    getChannelNames,
 };
 
 function connect() {
@@ -118,10 +149,7 @@ function connect() {
 
         if (LOG_EVENTS) {
             console.log("Received event:", data.type);
-            await Bun.write(
-                `./event_logs/${data.type}.json`,
-                JSON.stringify(data, null, 2),
-            );
+            await Bun.write(`./event_logs/${data.type}.json`, JSON.stringify(data, null, 2));
             return;
         }
 
@@ -162,6 +190,7 @@ function connect() {
                     if (!command) return;
 
                     const msg: MessageMetadata = {
+                        type: data.type,
                         text: messageText,
                         blocks: data.blocks,
                         ts: data.ts,
