@@ -25,6 +25,7 @@ const REACTION_TRIGGERS = Object.fromEntries(reactionModules.map((reaction) => [
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
 const SLACK_XOXP = process.env.SLACK_XOXP;
 const SLACK_WORKSPACE = process.env.SLACK_WORKSPACE || "hackclub";
+const LOG_EVENTS = process.env.LOG_EVENTS === "true";
 
 if (!SLACK_COOKIE) {
     throw new Error("SLACK_COOKIE environment variable is not set.");
@@ -114,6 +115,15 @@ function connect() {
 
     ws.addEventListener("message", async (event) => {
         const data = JSON.parse(event.data);
+
+        if (LOG_EVENTS) {
+            console.log("Received event:", data.type);
+            await Bun.write(
+                `./event_logs/${data.type}.json`,
+                JSON.stringify(data, null, 2),
+            );
+            return;
+        }
 
         switch (data.type) {
             case "hello":
