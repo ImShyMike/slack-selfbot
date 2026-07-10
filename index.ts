@@ -216,6 +216,12 @@ function connect() {
                     const commandDef = COMMANDS[command];
                     if (commandDef) {
                         await commandDef.handler(msg, args, ctx);
+                    } else {
+                        await chatPostEphemeral(
+                            data.channel,
+                            `Unknown command: \`${command}\`. Use \`help\` to see available commands.`,
+                            data.thread_ts,
+                        );
                     }
                 }
                 break;
