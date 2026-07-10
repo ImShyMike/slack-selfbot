@@ -42,6 +42,7 @@ export type BotContext = {
     getUserInfo: (userId: string) => Promise<UserInfo | null>;
     getChannelName: (channelId: string) => Promise<string | null>;
     getChannelNames: (channelIds: string[]) => Promise<(string | null)[]>;
+    sendFile: (channel: string, filename: string, content: string, snippetType?: string) => Promise<void>;
 };
 
 export type Command = {

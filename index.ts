@@ -91,14 +91,49 @@ async function chatPostEphemeral(channel: string, text: string, thread_ts?: stri
     })
         .then((res) => res.json())
         .then((data) => {
-            if (!(data as any).ok) {
+            if (!(data as any).ok && (data as any).error !== "restricted_action") {
                 console.error(`Error posting ephemeral message:`, data);
-                console.dir({channel, text, thread_ts, blocks, user}, {depth: null});
             }
         })
         .catch((err) => {
             console.error("Error posting ephemeral message:", err);
         });
+}
+
+async function sendFile(
+    channel: string,
+    filename: string,
+    content: string,
+    snippetType?: string,
+    blocks?: any[],
+): Promise<void> {
+    const body = new Blob([content], { type: "application/octet-stream" });
+    const uploadData = await client.filesGetUploadURL({
+        filename,
+        length: body.size,
+        snippet_type: snippetType,
+    });
+
+    const uploadResponse = await fetch(uploadData.upload_url, {
+        method: "POST",
+        body,
+    });
+    if (!uploadResponse.ok) {
+        const responseBody = await uploadResponse.text();
+        throw new Error(
+            `Failed to upload file contents: ${uploadResponse.status} ${uploadResponse.statusText}${responseBody ? `: ${responseBody}` : ""}`,
+        );
+    }
+
+    await client.filesCompleteUpload({
+        files: JSON.stringify([{ id: uploadData.file, title: filename }]),
+    });
+    await client.filesShare({
+        files: uploadData.file,
+        channel,
+        broadcast: false,
+        blocks: JSON.stringify(blocks ?? []),
+    });
 }
 
 async function getUserInfo(userId: string): Promise<UserInfo> {
@@ -132,6 +167,7 @@ const ctx: BotContext = {
     getUserInfo,
     getChannelName,
     getChannelNames,
+    sendFile,
 };
 
 function connect() {
@@ -145,7 +181,7 @@ function connect() {
         },
     });
 
-    ws.addEventListener("message", async (event) => {
+    const handleMessage = async (event: MessageEvent) => {
         const data = JSON.parse(event.data);
 
         if (LOG_EVENTS) {
@@ -243,6 +279,24 @@ function connect() {
                 // );
                 break;
         }
+    };
+
+    ws.addEventListener("message", (event) => {
+        void handleMessage(event).catch(async (err) => {
+            console.error("Error handling websocket message:", err);
+            const filename = `error_${Date.now()}.txt`;
+            await sendFile(userChannelId, filename, err.stack ?? String(err), "text", [
+                {
+                    type: "rich_text",
+                    elements: [
+                        {
+                            type: "rich_text_section",
+                            elements: [{ type: "text", text: "Selfbot crashed :(" }],
+                        },
+                    ],
+                },
+            ]);
+        });
     });
 
     ws.addEventListener("close", () => {
