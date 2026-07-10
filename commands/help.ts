@@ -13,19 +13,15 @@ export default {
     name: "help",
     description: "Show this help message.",
     args: "[command]",
-    handler: async (msg, args, context) => {
+    handler: async (msg, args, ctx) => {
         const commandName = args[0];
-        const command = commandName ? context.commands[commandName] : undefined;
+        const command = commandName ? ctx.commands[commandName] : undefined;
         if (commandName && command) {
             const usage = command.args ? `${commandName} ${command.args}` : commandName;
-            await context.chatPostEphemeral(msg.channel, `${usage}: ${command.description}`, msg.thread_ts);
+            await ctx.chatPostEphemeral(msg.channel, `${usage}: ${command.description}`, msg.thread_ts);
             return;
         }
 
-        await context.chatPostEphemeral(
-            msg.channel,
-            `Available commands:\n${formatHelpText(context.commands)}`,
-            msg.thread_ts,
-        );
+        await ctx.chatPostEphemeral(msg.channel, `Available commands:\n${formatHelpText(ctx.commands)}`, msg.thread_ts);
     },
 } satisfies Command;

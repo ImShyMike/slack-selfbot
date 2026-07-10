@@ -4,12 +4,8 @@ export default {
     name: "id",
     description: "Get the ID of a user, channel or usergroup.",
     args: "<@user|#channel|@usergroup>",
-    handler: async (msg, args, context) => {
-        const target = args[0];
-        if (!target) {
-            await context.chatPostEphemeral(msg.channel, "Please provide a user, channel or usergroup.", msg.thread_ts);
-            return;
-        }
+    handler: async (msg, args, ctx) => {
+        const target = args[0]!;
 
         let id: string | undefined;
         if (target.startsWith("<@") && target.endsWith(">")) {
@@ -24,10 +20,10 @@ export default {
         }
 
         if (!id) {
-            await context.chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup.", msg.thread_ts);
+            await ctx.chatPostEphemeral(msg.channel, "Invalid user, channel or usergroup", msg.thread_ts);
             return;
         }
 
-        await context.chatPostEphemeral(msg.channel, id, msg.thread_ts);
+        await ctx.chatPostEphemeral(msg.channel, id, msg.thread_ts);
     },
 } satisfies Command;

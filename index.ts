@@ -215,6 +215,14 @@ function connect() {
 
                     const commandDef = COMMANDS[command];
                     if (commandDef) {
+                        if (commandDef.args && args.length === 0) {
+                            await chatPostEphemeral(
+                                data.channel,
+                                `Usage: \`${command} ${commandDef.args}\``,
+                                data.thread_ts,
+                            );
+                            return;
+                        }
                         await commandDef.handler(msg, args, ctx);
                     } else {
                         await chatPostEphemeral(

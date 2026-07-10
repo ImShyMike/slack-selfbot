@@ -4,8 +4,8 @@ export default {
     name: "echo",
     description: "Send a message as yourself.",
     args: "<text>",
-    handler: async (msg, args, context) => {
-        context.client.chatPostMessage({
+    handler: async (msg, args, ctx) => {
+        ctx.client.chatPostMessage({
             channel: msg.channel,
             thread_ts: msg.thread_ts,
             ts: msg.ts,
