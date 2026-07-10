@@ -92,7 +92,8 @@ async function chatPostEphemeral(channel: string, text: string, thread_ts?: stri
         .then((res) => res.json())
         .then((data) => {
             if (!(data as any).ok) {
-                console.error("Error posting ephemeral message:", data);
+                console.error(`Error posting ephemeral message:`, data);
+                console.dir({channel, text, thread_ts, blocks, user}, {depth: null});
             }
         })
         .catch((err) => {
