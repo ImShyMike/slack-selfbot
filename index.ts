@@ -291,7 +291,7 @@ function connect() {
                     elements: [
                         {
                             type: "rich_text_section",
-                            elements: [{ type: "text", text: "Selfbot crashed :(" }],
+                            elements: [{ type: "text", text: "Something crashed :(" }],
                         },
                     ],
                 },
