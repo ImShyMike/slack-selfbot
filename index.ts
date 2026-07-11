@@ -146,17 +146,17 @@ async function getUserInfo(userId: string): Promise<UserInfo> {
         .then((data) => data as UserInfo);
 }
 
-async function getChannelName(channelId: string): Promise<string> {
+async function getChannelName(channelId: string): Promise<string | null> {
     return fetch(`https://flaron.halceon.dev/cid/${channelId}`)
         .then((res) => res.json())
-        .then((data) => (data as any).name ?? "unknown :(");
+        .then((data) => (data as any).name);
 }
 
-async function getChannelNames(channelIds: string[]): Promise<string[]> {
+async function getChannelNames(channelIds: string[]): Promise<(string | null)[]> {
     const dedupedIds = [...new Set(channelIds)];
     const namesById = new Map(await Promise.all(dedupedIds.map(async (id) => [id, await getChannelName(id)] as const)));
 
-    return channelIds.map((id) => namesById.get(id) ?? "unknown :(");
+    return channelIds.map((id) => namesById.get(id) ?? null);
 }
 
 const ctx: BotContext = {

@@ -12,7 +12,9 @@ export default {
 
         const constructedMessage =
             channelIds.length > 0
-                ? channelIds.map((channelId, index) => `\`${channelId}\`: ${channelNames[index]}`).join("\n")
+                ? channelIds
+                      .map((channelId, index) => `\`${channelId}\`: ${channelNames[index] ?? "unknown :("}`)
+                      .join("\n")
                 : "No channels found in message";
 
         await ctx.chatPostEphemeral(msg.channel, constructedMessage, msg.thread_ts);
