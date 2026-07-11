@@ -91,7 +91,11 @@ async function chatPostEphemeral(channel: string, text: string, thread_ts?: stri
     })
         .then((res) => res.json())
         .then((data) => {
-            if (!(data as any).ok && (data as any).error !== "restricted_action") {
+            if (
+                !(data as any).ok &&
+                (data as any).error !== "restricted_action" &&
+                (data as any).error !== "invalid_blocks"
+            ) {
                 console.error(`Error posting ephemeral message:`, data);
             }
         })
