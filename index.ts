@@ -186,7 +186,13 @@ function connect() {
     });
 
     const handleMessage = async (event: MessageEvent) => {
-        const data = JSON.parse(event.data);
+        let data: any;
+        try {
+            data = JSON.parse(event.data);
+        } catch (err) {
+            console.error("Failed to parse websocket message:", err);
+            return;
+        }
 
         if (LOG_EVENTS) {
             console.log("Received event:", data.type);
