@@ -68,3 +68,12 @@ type ReactionTriggerBase<T, Resolve extends boolean> = {
 
 export type ReactionTrigger =
     ReactionTriggerBase<MessageMetadata, true> | ReactionTriggerBase<ShallowMessageMetadata, false>;
+
+export type EventHandler = {
+    name: string;
+    /**
+     * The websocket event `type` this handler runs for (e.g. "message").
+     */
+    type: string;
+    handler: (data: any, context: BotContext) => Promise<void> | void;
+};

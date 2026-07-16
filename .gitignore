@@ -36,3 +36,6 @@ gifs.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# local-only modules (kept out of the public repo)
+private_*

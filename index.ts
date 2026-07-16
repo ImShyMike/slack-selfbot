@@ -1,7 +1,15 @@
 #!/usr/bin/env bun
 
 import { SlackClient } from "slack-undoc-client";
-import type { BotContext, Command, MessageMetadata, ReactionTrigger, ShallowMessageMetadata, UserInfo } from "./types";
+import type {
+    BotContext,
+    Command,
+    EventHandler,
+    MessageMetadata,
+    ReactionTrigger,
+    ShallowMessageMetadata,
+    UserInfo,
+} from "./types";
 
 async function loadModules<T>(pattern: string): Promise<T[]> {
     const glob = new Bun.Glob(pattern);
@@ -17,10 +25,16 @@ async function loadModules<T>(pattern: string): Promise<T[]> {
 
 const commandModules = await loadModules<Command>("commands/*.ts");
 const reactionModules = await loadModules<ReactionTrigger>("reactions/*.ts");
+const eventModules = await loadModules<EventHandler>("events/*.ts");
 
 const COMMANDS = Object.fromEntries(commandModules.map((command) => [command.name, command]));
 
 const REACTION_TRIGGERS = Object.fromEntries(reactionModules.map((reaction) => [reaction.name, reaction]));
+
+const EVENT_HANDLERS = eventModules.reduce<Record<string, EventHandler[]>>((handlers, event) => {
+    (handlers[event.type] ??= []).push(event);
+    return handlers;
+}, {});
 
 const SLACK_COOKIE = process.env.SLACK_COOKIE;
 const SLACK_XOXP = process.env.SLACK_XOXP;
@@ -288,6 +302,13 @@ function connect() {
                 //     JSON.stringify(data, null, 2),
                 // );
                 break;
+        }
+
+        const handlers = EVENT_HANDLERS[data.type];
+        if (handlers) {
+            for (const handler of handlers) {
+                await handler.handler(data, ctx);
+            }
         }
     };
 
