@@ -56,6 +56,7 @@ type ReactionCallback<T> = (msg: T, ctx: BotContext) => Promise<void>;
 
 type ReactionTriggerBase<T, Resolve extends boolean> = {
     name: string;
+    remove?: boolean;
     /**
      * Only triggers when the reaction is added by the selfbot user
      */

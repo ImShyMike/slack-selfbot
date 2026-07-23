@@ -227,6 +227,13 @@ function connect() {
                 //console.log(`Reaction added: ${data.reaction} by ${data.user} in ${data.item.channel}`);
                 const trigger = REACTION_TRIGGERS[data.reaction];
                 if (trigger) {
+                    if (trigger.remove) {
+                        await client.reactionsRemove({
+                            name: data.reaction,
+                            channel: data.item.channel,
+                            timestamp: data.item.ts,
+                        });
+                    }
                     if (trigger.resolveMessage) {
                         const msg = await getMessage(data.item.channel, data.item.ts);
                         if (!msg) {
