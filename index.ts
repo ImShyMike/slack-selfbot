@@ -285,7 +285,7 @@ function connect() {
 
                         const commandDef = COMMANDS[command];
                         if (commandDef) {
-                            if (commandDef.args && args.length === 0) {
+                            if (commandDef.args && args.length === 0 && commandDef.name !== "help") {
                                 await chatPostEphemeral(
                                     data.channel,
                                     `Usage: \`${command} ${commandDef.args}\``,
