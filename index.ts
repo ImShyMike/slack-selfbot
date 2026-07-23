@@ -262,42 +262,45 @@ function connect() {
                 break;
 
             case "message":
-                if (data.subtype === "me_message" && data.user === selfUserInfo.user_id) {
-                    client.chatDelete({
-                        channel: data.channel,
-                        ts: data.ts,
-                    });
-                    const messageText: string = data.text.trim();
-                    const [command, ...args] = messageText.split(/\s+/);
-                    if (!command) return;
+                if (data.user === selfUserInfo.user_id) {
+                    const textCommand = data.text.startsWith("#!");
+                    if (data.subtype === "me_message" || (data.subtype === undefined && textCommand)) {
+                        client.chatDelete({
+                            channel: data.channel,
+                            ts: data.ts,
+                        });
+                        const messageText: string = textCommand ? data.text.slice(2).trim() : data.text.trim();
+                        const [command, ...args] = messageText.split(/\s+/);
+                        if (!command) return;
 
-                    const msg: MessageMetadata = {
-                        type: data.type,
-                        text: messageText,
-                        blocks: data.blocks,
-                        ts: data.ts,
-                        channel: data.channel,
-                        user: data.user,
-                        thread_ts: data.thread_ts,
-                    };
+                        const msg: MessageMetadata = {
+                            type: data.type,
+                            text: messageText,
+                            blocks: data.blocks,
+                            ts: data.ts,
+                            channel: data.channel,
+                            user: data.user,
+                            thread_ts: data.thread_ts,
+                        };
 
-                    const commandDef = COMMANDS[command];
-                    if (commandDef) {
-                        if (commandDef.args && args.length === 0) {
+                        const commandDef = COMMANDS[command];
+                        if (commandDef) {
+                            if (commandDef.args && args.length === 0) {
+                                await chatPostEphemeral(
+                                    data.channel,
+                                    `Usage: \`${command} ${commandDef.args}\``,
+                                    data.thread_ts,
+                                );
+                                return;
+                            }
+                            await commandDef.handler(msg, args, ctx);
+                        } else {
                             await chatPostEphemeral(
                                 data.channel,
-                                `Usage: \`${command} ${commandDef.args}\``,
+                                `Unknown command: \`${command}\`. Use \`help\` to see available commands.`,
                                 data.thread_ts,
                             );
-                            return;
                         }
-                        await commandDef.handler(msg, args, ctx);
-                    } else {
-                        await chatPostEphemeral(
-                            data.channel,
-                            `Unknown command: \`${command}\`. Use \`help\` to see available commands.`,
-                            data.thread_ts,
-                        );
                     }
                 }
                 break;
